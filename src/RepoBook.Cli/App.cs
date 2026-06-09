@@ -7,6 +7,7 @@ namespace RepoBook;
 
 public sealed class App
 {
+    private readonly Action<string> _log;
     private readonly GitClient _gitClient;
     private readonly GitHistoryAnalyzer _historyAnalyzer;
     private readonly FileScanner _fileScanner;
@@ -14,7 +15,7 @@ public sealed class App
     private readonly MarkdownReportWriter _reportWriter;
 
     public App()
-        : this(CreateDefaultGitClient(), new FileScanner(), new TechnologyDetector(), new MarkdownReportWriter())
+        : this(CreateDefaultGitClient(), new FileScanner(), new TechnologyDetector(), new MarkdownReportWriter(), WriteProgress)
     {
     }
 
@@ -22,13 +23,15 @@ public sealed class App
         GitClient gitClient,
         FileScanner fileScanner,
         TechnologyDetector technologyDetector,
-        MarkdownReportWriter reportWriter)
+        MarkdownReportWriter reportWriter,
+        Action<string>? log = null)
         : this(
             gitClient,
             new GitHistoryAnalyzer(gitClient),
             fileScanner,
             technologyDetector,
-            reportWriter)
+            reportWriter,
+            log)
     {
     }
 
@@ -37,8 +40,10 @@ public sealed class App
         GitHistoryAnalyzer historyAnalyzer,
         FileScanner fileScanner,
         TechnologyDetector technologyDetector,
-        MarkdownReportWriter reportWriter)
+        MarkdownReportWriter reportWriter,
+        Action<string>? log = null)
     {
+        _log = log ?? WriteProgress;
         _gitClient = gitClient;
         _historyAnalyzer = historyAnalyzer;
         _fileScanner = fileScanner;
@@ -50,10 +55,17 @@ public sealed class App
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
 
+        _log("Resolving repository path...");
         var absoluteInputPath = Path.GetFullPath(repositoryPath);
+
+        _log("Detecting Git repository root...");
         var repositoryRoot = await GetRepositoryRootAsync(absoluteInputPath);
+
+        _log("Checking commit history...");
         var hasCommits = await _historyAnalyzer.HasCommitsAsync(repositoryRoot);
-        var scanResult = await _fileScanner.ScanAsync(repositoryRoot, cancellationToken);
+
+        _log("Scanning repository files...");
+        var scanResult = await _fileScanner.ScanAsync(repositoryRoot, _log, cancellationToken);
 
         var commitCount = 0;
         var firstCommitDate = default(DateOnly?);
@@ -65,6 +77,7 @@ public sealed class App
 
         if (hasCommits)
         {
+            _log("Analyzing Git history...");
             commitCount = await _historyAnalyzer.GetCommitCountAsync(repositoryRoot);
             (firstCommitDate, lastCommitDate) = await _historyAnalyzer.GetCommitDateRangeAsync(repositoryRoot);
             contributors = (await _historyAnalyzer.GetContributorsAsync(repositoryRoot, commitCount)).ToArray();
@@ -74,7 +87,11 @@ public sealed class App
         }
 
         var filesWithDates = ApplyFirstAddedDates(scanResult.Files, firstAddedDates);
-        var technologies = await _technologyDetector.DetectAsync(repositoryRoot, filesWithDates, cancellationToken);
+
+        _log("Detecting technologies...");
+        var technologies = await _technologyDetector.DetectAsync(repositoryRoot, filesWithDates, _log, cancellationToken);
+
+        _log("Building report model...");
         var largestModules = BuildLargestModules(filesWithDates);
         var oldestFiles = BuildOldestFiles(filesWithDates);
         var mostActiveAreas = BuildMostActiveAreas(commitTouchesByModule);
@@ -105,8 +122,13 @@ public sealed class App
         };
 
         var outputPath = Path.GetFullPath(Path.Combine(repositoryRoot, "repository-encyclopedia.md"));
+
+        _log("Rendering Markdown report...");
         var markdown = _reportWriter.Write(report);
+
+        _log("Writing output file...");
         await File.WriteAllTextAsync(outputPath, markdown, cancellationToken);
+        _log("Done.");
         return outputPath;
     }
 
@@ -263,5 +285,10 @@ public sealed class App
     private static GitClient CreateDefaultGitClient()
     {
         return new GitClient();
+    }
+
+    private static void WriteProgress(string message)
+    {
+        Console.Error.WriteLine($"[repo-book] {message}");
     }
 }

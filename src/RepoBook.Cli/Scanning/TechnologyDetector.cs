@@ -7,6 +7,7 @@ public sealed class TechnologyDetector
 {
     private const int MaxEvidenceRows = 30;
     private const long MaxContentScanBytes = 1024 * 1024;
+    private const int ProgressIntervalFiles = 500;
 
     private static readonly (string PackageFragment, string Technology)[] CsprojPackages =
     [
@@ -61,9 +62,11 @@ public sealed class TechnologyDetector
     public Task<IReadOnlyList<TechnologyEvidence>> DetectAsync(
         string repositoryRoot,
         IReadOnlyList<FileStat> files,
+        Action<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
         var evidenceByTechnology = new Dictionary<string, string>(StringComparer.Ordinal);
+        var processedFiles = 0;
 
         foreach (var file in files)
         {
@@ -75,7 +78,15 @@ public sealed class TechnologyDetector
 
             AddFileBasedDetections(evidenceByTechnology, repositoryRoot, relativePath, fileName, extension);
             AddContentBasedDetections(evidenceByTechnology, repositoryRoot, file);
+            processedFiles++;
+
+            if (progress is not null && processedFiles % ProgressIntervalFiles == 0)
+            {
+                progress($"Technology detection inspected {processedFiles:N0} files...");
+            }
         }
+
+        progress?.Invoke($"Technology detection inspected {processedFiles:N0} files total.");
 
         return Task.FromResult<IReadOnlyList<TechnologyEvidence>>(evidenceByTechnology
             .OrderBy(item => item.Key, StringComparer.Ordinal)

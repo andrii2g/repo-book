@@ -7,15 +7,20 @@ public sealed class FileScanner
 {
     private const long LargeFileThresholdBytes = 10 * 1024 * 1024;
     private const int BinaryProbeBytes = 8192;
+    private const int ProgressIntervalFiles = 250;
     private readonly LanguageDetector _languageDetector = new();
 
-    public Task<ScanResult> ScanAsync(string repositoryRoot, CancellationToken cancellationToken = default)
+    public Task<ScanResult> ScanAsync(
+        string repositoryRoot,
+        Action<string>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         var files = new List<FileStat>();
         var allDirectoryStats = new Dictionary<string, MutableDirectoryStat>(StringComparer.Ordinal);
         var topLevelDirectoryStats = new Dictionary<string, MutableDirectoryStat>(StringComparer.Ordinal);
         var languageStats = new Dictionary<string, MutableLanguageStat>(StringComparer.Ordinal);
         var directoriesWithIncludedFiles = new HashSet<string>(StringComparer.Ordinal);
+        var processedFiles = 0;
         long totalBytes = 0;
         long totalLines = 0;
 
@@ -63,13 +68,21 @@ public sealed class FileScanner
             };
 
             files.Add(fileStat);
+            processedFiles++;
             UpdateDirectoryStats(relativePath, bytes, lines, allDirectoryStats, topLevelDirectoryStats, directoriesWithIncludedFiles);
             UpdateLanguageStats(language, bytes, lines, languageStats);
+
+            if (progress is not null && processedFiles % ProgressIntervalFiles == 0)
+            {
+                progress($"Scanned {processedFiles:N0} files...");
+            }
         }
 
         var orderedFiles = files
             .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
             .ToArray();
+
+        progress?.Invoke($"Scanned {processedFiles:N0} files total.");
 
         return Task.FromResult(new ScanResult
         {
