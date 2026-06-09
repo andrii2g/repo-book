@@ -5,6 +5,8 @@ namespace RepoBook.Git;
 
 public sealed class GitHistoryAnalyzer
 {
+    private const string DateMarkerPrefix = "@@@";
+    private const string CommitMarker = "@@@COMMIT";
     private readonly GitClient _gitClient;
 
     public GitHistoryAnalyzer(GitClient gitClient)
@@ -96,7 +98,7 @@ public sealed class GitHistoryAnalyzer
 
     public async Task<Dictionary<string, DateOnly>> GetFirstAddedDatesAsync(string repoRoot)
     {
-        var lines = await _gitClient.RunLinesAsync(repoRoot, "log", "--reverse", "--diff-filter=A", "--name-only", "--format=@@@%cs");
+        var lines = await _gitClient.RunLinesAsync(repoRoot, "log", "--reverse", "--diff-filter=A", "--name-only", $"--format={DateMarkerPrefixFormat}%cs");
         var firstAddedDates = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
         DateOnly? currentDate = null;
 
@@ -108,9 +110,9 @@ public sealed class GitHistoryAnalyzer
                 continue;
             }
 
-            if (line.StartsWith("@@@", StringComparison.Ordinal))
+            if (line.StartsWith(DateMarkerPrefix, StringComparison.Ordinal))
             {
-                currentDate = ParseDate(line[3..]);
+                currentDate = ParseDate(line[DateMarkerPrefix.Length..]);
                 continue;
             }
 
@@ -128,7 +130,7 @@ public sealed class GitHistoryAnalyzer
 
     public async Task<Dictionary<string, int>> GetCommitTouchesByModuleAsync(string repoRoot)
     {
-        var lines = await _gitClient.RunLinesAsync(repoRoot, "log", "--name-only", "--format=@@@COMMIT");
+        var lines = await _gitClient.RunLinesAsync(repoRoot, "log", "--name-only", $"--format={CommitMarkerFormat}");
         var commitTouches = new Dictionary<string, int>(StringComparer.Ordinal);
         var currentModules = new HashSet<string>(StringComparer.Ordinal);
 
@@ -136,7 +138,7 @@ public sealed class GitHistoryAnalyzer
         {
             var line = rawLine.Trim();
 
-            if (line.StartsWith("@@@COMMIT", StringComparison.Ordinal))
+            if (line.StartsWith(CommitMarker, StringComparison.Ordinal))
             {
                 FlushCommitTouches(currentModules, commitTouches);
                 currentModules.Clear();
@@ -200,7 +202,7 @@ public sealed class GitHistoryAnalyzer
 
     private async Task<Dictionary<int, int>> GetFilesAddedByYearAsync(string repoRoot)
     {
-        var lines = await _gitClient.RunLinesAsync(repoRoot, "log", "--reverse", "--diff-filter=A", "--name-only", "--format=@@@%cs");
+        var lines = await _gitClient.RunLinesAsync(repoRoot, "log", "--reverse", "--diff-filter=A", "--name-only", $"--format={DateMarkerPrefixFormat}%cs");
         var counts = new Dictionary<int, int>();
         DateOnly? currentDate = null;
 
@@ -212,9 +214,9 @@ public sealed class GitHistoryAnalyzer
                 continue;
             }
 
-            if (line.StartsWith("@@@", StringComparison.Ordinal))
+            if (line.StartsWith(DateMarkerPrefix, StringComparison.Ordinal))
             {
-                currentDate = ParseDate(line[3..]);
+                currentDate = ParseDate(line[DateMarkerPrefix.Length..]);
                 continue;
             }
 
@@ -258,6 +260,10 @@ public sealed class GitHistoryAnalyzer
     {
         return path.Replace('\\', '/').Trim();
     }
+
+    private static string DateMarkerPrefixFormat => "%x40%x40%x40";
+
+    private static string CommitMarkerFormat => "%x40%x40%x40COMMIT";
 
     private static bool CanTreatMissingHeadAsEmptyRepository(GitCommandException ex)
     {

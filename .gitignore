@@ -5,3 +5,4 @@
 /.dotnet-home
 /.vs/repo-book.slnx/FileContentIndex
 /src/RepoBook.Cli/obj
+/src/RepoBook.Cli/bin/Debug/net10.0

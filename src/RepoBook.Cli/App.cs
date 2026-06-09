@@ -104,7 +104,7 @@ public sealed class App
             StructureTreeLines = scanResult.StructureTreeLines,
         };
 
-        var outputPath = Path.Combine(repositoryRoot, "repository-encyclopedia.md");
+        var outputPath = Path.GetFullPath(Path.Combine(repositoryRoot, "repository-encyclopedia.md"));
         var markdown = _reportWriter.Write(report);
         await File.WriteAllTextAsync(outputPath, markdown, cancellationToken);
         return outputPath;
