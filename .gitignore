@@ -1,0 +1,7 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.dotnet-home
+/.vs/repo-book.slnx/FileContentIndex
+/src/RepoBook.Cli/obj
